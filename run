@@ -1,0 +1,5 @@
+ghdl -a polistack.vhdl
+ghdl -e polistack
+ghdl -a polistack_tb.vhdl
+ghdl -e polistack_tb
+ghdl -r polistack_tb --wave=polistack.ghw

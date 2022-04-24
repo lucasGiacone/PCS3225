@@ -1,0 +1,5 @@
+cp polistack.o testbench/polistack.o
+cd testbench
+ghdl --link toplevel
+echo "running toplevel"
+./toplevel

@@ -1,0 +1,17 @@
+v 4
+file . "polistack.vhdl" "f6e4aba36b3eb766b179f9053d03954294d19e4f" "20220424080339.617":
+  entity d_register at 1( 0) + 0 on 785;
+  architecture behavior of d_register at 16( 332) + 0 on 786;
+  entity alu at 30( 756) + 4 on 787;
+  entity bitoperation at 47( 1259) + 4 on 788;
+  architecture whenelse of bitoperation at 57( 1568) + 4 on 789;
+  architecture combinatory of alu at 75( 2320) + 4 on 790;
+  entity data_flow at 121( 3981) + 4 on 791;
+  architecture behavorial of data_flow at 147( 5023) + 4 on 792;
+  entity control_unit at 299( 10765) + 4 on 793;
+  architecture behavior of control_unit at 316( 11350) + 4 on 794;
+  entity polistack at 598( 22285) + 0 on 795;
+  architecture allinone of polistack at 618( 22875) + 0 on 796;
+file . "polistack_tb.vhdl" "4bf606cd964dd2da4a7cd7643bf407e73d25dc44" "20220424080340.403":
+  entity polistack_tb at 1( 0) + 0 on 797;
+  architecture test of polistack_tb at 8( 117) + 0 on 798;
