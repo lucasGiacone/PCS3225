@@ -296,104 +296,100 @@ end architecture behavior;
 
 --------------------------------------------------------------------------------
 
-    library ieee;
-    use ieee.numeric_bit.all;
+library ieee;
+use ieee.numeric_bit.all;
 
-    entity control_unit is
-        port (
-            clock, reset : in bit;
-            pc_en, ir_en, sp_en,
-            pc_src, mem_a_addr_src, mem_b_mem_src, alu_shfimm_src, alu_mem_src,
-            mem_we, mem_enable: out bit;
-            mem_b_addr_src, mem_b_wrd_src, alu_a_src, alu_b_src: out bit_vector(1 downto 0);
-            alu_op: out bit_vector(2 downto 0);
-            busy: in bit;
-            instruction: in bit_vector(7 downto 0);
-            halted: out bit
-        );
-    end entity control_unit;
+entity control_unit is
+    port (
+        clock, reset : in bit;
+        pc_en, ir_en, sp_en,
+        pc_src, mem_a_addr_src, mem_b_mem_src, alu_shfimm_src, alu_mem_src,
+        mem_we, mem_enable: out bit;
+        mem_b_addr_src, mem_b_wrd_src, alu_a_src, alu_b_src: out bit_vector(1 downto 0);
+        alu_op: out bit_vector(2 downto 0);
+        busy: in bit;
+        instruction: in bit_vector(7 downto 0);
+        halted: out bit
+    );
+end entity control_unit;
 
-    architecture behavior of control_unit is
+architecture behavior of control_unit is
 
-        type state_type is (
-            init,
-            fetch,
-            decode,
-            decode2,
-            execute,
-            write
-            );
-
-        type op_code is (
-            BREAK,
-            PUSHSP,
-            POPPC,
-            ADD,
-            ADD2,
-            B_AND,
-            B_AND2,
-            B_OR,
-            B_OR2,
-            LOAD,
-            B_NOT,
-            FLIP,
-            NOP,
-            STORE,
-            POPSP,
-            ADDSP,
-            CALL,
-            STORESP,
-            LOADSP,
-            IM1,
-            IMN
+    type state_type is (
+        fetch,
+        decode,
+        execute
         );
 
+    type op_code is (
+        BREAK,
+        PUSHSP,
+        POPPC,
+        ADD,
+        B_AND,
+        B_OR,
+        LOAD,
+        B_NOT,
+        FLIP,
+        NOP,
+        STORE,
+        POPSP,
+        ADDSP,
+        CALL,
+        STORESP,
+        LOADSP,
+        IM1,
+        IMN
+    );
 
-        type second_op is (
-            mem_add,
-            mem_and,
-            mem_or,
-            none
-        );
 
-        signal state : state_type := init;
-        signal second_op_sel : second_op := none;
-        signal op_code_sel : op_code := BREAK;
+    type second_op is (
+        mem_add,
+        mem_and,
+        mem_or,
+        none
+    );
 
-        signal halt : bit := '0';
-        signal waiting_mem: bit := '0';
+    signal second_op_sel : second_op := none;
+    signal op_code_sel : op_code;
+
+    signal halt : bit := '0';
+    signal waited_mem: bit := '0';
+    signal wait_mem: bit := '0';
+
+    signal current_state, next_state : state_type;
 
 
-        function startsWith(v,s: bit_vector) return boolean is
-        begin
-            for idx in 0 to s'length loop
-                if v(idx + v'length - s'length) /= s(idx) then
-                    return false;
-                end if;
-            end loop;
-            return true;
-        end function;
+begin
 
+    sincrono: process(clock, reset)
     begin
-        process(clock)
-        begin
-            if clock'event and clock = '1' and halt = '0' then
-                if waiting_mem = '1' then
-                    sp_en <= '0';
-                    pc_en <= '0';
-                    mem_we <= '0';
-                    if busy = '0' then
-                        mem_enable <= '0';
-                        state <= execute;
-                    end if;
-                elsif state = execute or state = init then
-                    state <= fetch;
+        if (reset='1' and rising_edge(clock)) then
+            current_state <= fetch;
+        elsif (rising_edge(clock) and halt = '0') then
+            current_state <= next_state;
+        end if;
+    end process sincrono;
 
+
+    combinatorio: process(current_state, busy)
+    begin
+        if wait_mem = '1' then
+            sp_en <= '0';
+            pc_en <= '0';
+            mem_we <= '0';
+            if busy = '0' then
+                mem_enable <= '0';
+            end if;
+        end if;
+        case(current_state) is
+            when fetch =>
+                if wait_mem = '0' then
                     -- Enables
                     sp_en <= '0';
-                    mem_enable <= '1';
                     ir_en <= '1';
-                    pc_en <= '1';
+                    pc_en <= '0';
+                    mem_enable <= '1';
                     
                     -- Pc = Pc + 1
                     alu_op <= "001"; -- soma
@@ -403,63 +399,67 @@ end architecture behavior;
 
                     mem_a_addr_src <= '1'; -- mem_addr = Pc, colocar valor de mem[pc][7:0] em IR
                     -- Não há necessidade de mudar o endereço de memória de B
-
-                elsif state = fetch then
-                    state <= decode;
-                    -- Next state
-                    mem_enable <= '0';
-                    sp_en <= '0';
+                    wait_mem <= '1';
+                elsif falling_edge(busy) then
+                    pc_en <= '1';
                     ir_en <= '0';
-                    pc_en <= '0';
-                elsif state = decode then
-                    state <= decode2;
-                    if instruction = "00000000" then
-                        op_code_sel <= BREAK;
-                    elsif instruction = "00000010" then
-                        op_code_sel <= PUSHSP;
-                    elsif instruction = "00000100" then
-                        op_code_sel <= POPPC;
-                    elsif instruction = "00000101" then
-                        op_code_sel <= ADD;
-                    elsif instruction = "00000110" then
-                        op_code_sel <= B_AND;
-                    elsif instruction = "00000111" then
-                        op_code_sel <= B_OR;
-                    elsif instruction = "00001000" then
-                        op_code_sel <= LOAD;
-                    elsif instruction = "00001001" then
-                        op_code_sel <= B_NOT;
-                    elsif instruction = "00001010" then
-                        op_code_sel <= FLIP;
-                    elsif instruction = "00001011" then
-                        op_code_sel <= NOP;
-                    elsif instruction = "00001100" then
-                        op_code_sel <= STORE;
-                    elsif instruction = "00001101" then
-                        op_code_sel <= POPSP;
-                    elsif instruction(7 downto 4) = "0001" then
-                        op_code_sel <= ADDSP;
-                    elsif instruction(7 downto 3) = "001" then
-                        op_code_sel <= CALL;
-                    elsif instruction(7 downto 3) = "010" then
-                        op_code_sel <= STORESP;
-                    elsif instruction(7 downto 3) = "011" then
-                        op_code_sel <= LOADSP;
-                    elsif instruction(7) = '1' then
-                        if op_code_sel = IM1 then
-                            op_code_sel <= IMN;
-                        else
-                            op_code_sel <= IM1;
-                        end if;
+                    wait_mem <= '0';
+                    next_state <= decode;
+                end if;
+            when decode =>
+                pc_en <= '0';
+                next_state <= execute;
+                
+                if instruction = "00000000" then
+                    op_code_sel <= BREAK;
+                elsif instruction = "00000010" then
+                    op_code_sel <= PUSHSP;
+                elsif instruction = "00000100" then
+                    op_code_sel <= POPPC;
+                elsif instruction = "00000101" then
+                    op_code_sel <= ADD;
+                elsif instruction = "00000110" then
+                    op_code_sel <= B_AND;
+                elsif instruction = "00000111" then
+                    op_code_sel <= B_OR;
+                elsif instruction = "00001000" then
+                    op_code_sel <= LOAD;
+                elsif instruction = "00001001" then
+                    op_code_sel <= B_NOT;
+                elsif instruction = "00001010" then
+                    op_code_sel <= FLIP;
+                elsif instruction = "00001011" then
+                    op_code_sel <= NOP;
+                elsif instruction = "00001100" then
+                    op_code_sel <= STORE;
+                elsif instruction = "00001101" then
+                    op_code_sel <= POPSP;
+                elsif instruction(7 downto 4) = "0001" then
+                    op_code_sel <= ADDSP;
+                elsif instruction(7 downto 3) = "001" then
+                    op_code_sel <= CALL;
+                elsif instruction(7 downto 3) = "010" then
+                    op_code_sel <= STORESP;
+                elsif instruction(7 downto 3) = "011" then
+                    op_code_sel <= LOADSP;
+                elsif instruction(7) = '1' then
+                    if op_code_sel = IM1 then
+                        op_code_sel <= IMN;
+                    else
+                        op_code_sel <= IM1;
                     end if;
-                elsif state = decode2 then
-                    state <= execute;
-                    -- Next state
-                    case op_code_sel is
-                        when BREAK =>
-                            halted <= '1';
-                            halt <= '1';
-                        when PUSHSP =>
+                end if;
+            when execute =>
+                case op_code_sel is
+                    when BREAK =>
+                        sp_en <= '0';
+                        pc_en <= '0';
+                        ir_en <= '0';
+                        mem_we <= '0';
+                        halted <= '1';
+                        halt <= '1';
+                    when PUSHSP =>
+                        if wait_mem = '0' then
                             mem_enable <= '1';
                             sp_en <= '1';
 
@@ -480,11 +480,15 @@ end architecture behavior;
                             -- mem_B_wrd = SP
                             mem_b_addr_src <= "10"; -- Saida da ULA
                             -- mem_B_addr = alu_F = SP - 4
-                            waiting_mem <= '1';
-                        when POPPC =>
+                            wait_mem <= '1';
+                        elsif falling_edge(busy) then
+                            next_state <= fetch;
+                            wait_mem <= '0';
+                        end if;
+                    when POPPC =>
+                        if wait_mem = '0' then
                             mem_enable <= '1';
                             sp_en <= '1';
-                            pc_en <= '1';
 
                             ---- SP = SP + 4
                             alu_a_src <= "01";      -- Saida do registador SP 
@@ -493,105 +497,435 @@ end architecture behavior;
                             alu_op <= "001";
                             ---- SP = SP + 4; alu_f = sp + 4
 
-                            mem_a_addr_src <= '1';
+                            mem_a_addr_src <= '0';
+                            wait_mem <= '1';
+                        elsif falling_edge(busy) then
+                            wait_mem <= '0';
+                            pc_en <= '1';
                             pc_src <= '1';
-                        when ADD =>
+                            next_state <= fetch;
+                        end if;
+                    when ADD =>
+                        if wait_mem = '0' then
                             mem_enable <= '1';
                             sp_en <= '1';
 
-                            alu_a_src <= "01";      -- Saida do registador SP 
-                            alu_b_src <= "00";      -- Saida de shfimm
-                            alu_shfimm_src <= '1';  -- imm_shft = 4
-                            alu_op <= "001";        -- alu_f = sp + 4; sp = sp + 4
-
-                            mem_a_addr_src <= '0';  -- memA_addr = sp
-                            mem_b_addr_src <= "10"; -- memB_addr = alu_f = sp + 4
-
-                            op_code_sel <= ADD2;
-                        when ADD2 =>
-                            mem_we <= '1';
-                            sp_en <= '0';
-
-                            alu_a_src <= "10";      -- alu_a = mem[sp]
-                            alu_b_src <= "01";      -- alu_b = alu_mem
-                            alu_mem_src <= '1';     -- alu_mem = mem[sp+4]
-                            alu_op <= "001";        -- alu_f = alu_a + alu_b
-
-                            mem_b_addr_src <= "00"; -- memB_addr = sp (agora sp+4)
-                            mem_b_wrd_src <= "00";  -- memB_wrd = alu_f
-                            waiting_mem <= '1';
-                        when B_AND =>
-                        when B_AND2 =>
-                        when B_OR =>
-                        when B_OR2 =>
-                        when LOAD =>
-                        when B_NOT =>
-                            mem_enable <= '1';
-                            mem_we <= '1';
-
-                            mem_a_addr_src <= '0';
-                            mem_b_addr_src <= "00";
-                            mem_b_wrd_src <= "00";
-
-                            alu_a_src <= "10";
-                            alu_op <= "101";
-                            waiting_mem <= '1';
-                        when FLIP =>
-                            mem_enable <= '1';
-                            mem_we <= '1';
-
-                            mem_a_addr_src <= '0';
-                            mem_b_addr_src <= "00";
-                            mem_b_wrd_src <= "00";
-
-                            alu_a_src <= "10";
-                            alu_op <= "110";
-                            waiting_mem <= '1';
-                        when NOP =>
-                            -- Faz nada
-                        when STORE =>
-                        when POPSP =>
-                            mem_enable <= '1';
-                            sp_en <= '1';
-
-                            alu_a_src <= "10";
-                            alu_op <= "000";
-
-                            mem_a_addr_src <= '0';
-
-                        when ADDSP =>
-                        when CALL =>
-                        when STORESP =>
-                        when LOADSP =>
-                        when IM1 =>
-                            mem_enable <= '1';
-                            mem_we <= '1';
-
+                            ---- SP = SP + 4
                             alu_a_src <= "01";      -- Saida do registador SP 
                             alu_b_src <= "00";      -- Saida de shfimm
                             alu_shfimm_src <= '1';  
-                            alu_op <= "100";
+                            alu_op <= "001";
+                            ---- SP = SP + 4; alu_f = sp + 4
+
+                            mem_a_addr_src <= '0';   -- a_addr = sp 
+                            mem_b_addr_src <= "10";  -- b_addr = sp + 4
+                            wait_mem <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
 
                             mem_b_addr_src <= "00";
-                            mem_b_wrd_src <= "11";
+                            mem_b_wrd_src <= "00";
 
-                            waiting_mem <= '1';
-                        when IMN =>
+                            alu_a_src <= "10";
+                            alu_b_src <= "01";
+                            alu_mem_src <= '1';
+                            alu_op <= "001";
+
                             mem_enable <= '1';
                             mem_we <= '1';
+                            
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when B_AND =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+                            sp_en <= '1';
 
-                            alu_mem_src <= '0';
+                            ---- SP = SP + 4
+                            alu_a_src <= "01";      -- Saida do registador SP 
+                            alu_b_src <= "00";      -- Saida de shfimm
+                            alu_shfimm_src <= '1';  
+                            alu_op <= "001";
+                            ---- SP = SP + 4; alu_f = sp + 4
+
+                            mem_a_addr_src <= '0';   -- a_addr = sp 
+                            mem_b_addr_src <= "10";  -- b_addr = sp + 4
+                            wait_mem <= '1';
+                            
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            mem_b_addr_src <= "00";
+                            mem_b_wrd_src <= "00";
+
+                            alu_a_src <= "10";
                             alu_b_src <= "01";
-                            alu_op <= "111";
+                            alu_mem_src <= '1';
+                            alu_op <= "010";
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                            
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when B_OR =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+                            sp_en <= '1';
+
+                            ---- SP = SP + 4
+                            alu_a_src <= "01";      -- Saida do registador SP 
+                            alu_b_src <= "00";      -- Saida de shfimm
+                            alu_shfimm_src <= '1';  
+                            alu_op <= "001";
+                            ---- SP = SP + 4; alu_f = sp + 4
+
+                            mem_a_addr_src <= '0';   -- a_addr = sp 
+                            mem_b_addr_src <= "10";  -- b_addr = sp + 4
+                            wait_mem <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            mem_b_addr_src <= "00";
+                            mem_b_wrd_src <= "00";
+
+                            alu_a_src <= "10";
+                            alu_b_src <= "01";
+                            alu_mem_src <= '1';
+                            alu_op <= "011";
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when LOAD =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+                            mem_a_addr_src <= '0';   -- a_addr = sp 
+                            mem_b_addr_src <= "00";  -- b_addr = sp
+                            wait_mem <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+                            mem_b_addr_src <= "00";
+                            mem_b_wrd_src <= "00";
+                            alu_a_src <= "10";
+                            alu_op <= "000";
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when B_NOT =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+                            sp_en <= '1';
+
+                            ---- SP = SP + 4
+                            alu_a_src <= "01";      -- Saida do registador SP 
+                            alu_b_src <= "00";      -- Saida de shfimm
+                            alu_shfimm_src <= '1';  
+                            alu_op <= "001";
+                            ---- SP = SP + 4; alu_f = sp + 4
+
+                            mem_a_addr_src <= '0';   -- a_addr = sp 
+                            mem_b_addr_src <= "10";  -- b_addr = sp + 4
+                            wait_mem <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            mem_b_addr_src <= "00";
+                            mem_b_wrd_src <= "00";
+
+                            alu_a_src <= "10";
+                            alu_b_src <= "01";
+                            alu_mem_src <= '1';
+                            alu_op <= "101";
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when FLIP =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+                            sp_en <= '1';
+
+                            ---- SP = SP + 4
+                            alu_a_src <= "01";      -- Saida do registador SP 
+                            alu_b_src <= "00";      -- Saida de shfimm
+                            alu_shfimm_src <= '1';  
+                            alu_op <= "001";
+                            ---- SP = SP + 4; alu_f = sp + 4
+
+                            mem_a_addr_src <= '0';   -- a_addr = sp 
+                            mem_b_addr_src <= "10";  -- b_addr = sp + 4
+                            wait_mem <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            mem_b_addr_src <= "00";
+                            mem_b_wrd_src <= "00";
+
+                            alu_a_src <= "10";
+                            alu_b_src <= "01";
+                            alu_mem_src <= '1';
+                            alu_op <= "110";
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                            
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when NOP =>
+                        next_state <= fetch;
+                        -- Faz nada
+                    when STORE =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+                            sp_en <= '1';
+
+                            ---- SP = SP + 4
+                            alu_a_src <= "01";      -- Saida do registador SP 
+                            alu_b_src <= "00";      -- Saida de shfimm
+                            alu_shfimm_src <= '1';  
+                            alu_op <= "001";
+                            ---- SP = SP + 4; alu_f = sp + 4
+
+                            mem_a_addr_src <= '0';   -- a_addr = sp 
+                            mem_b_addr_src <= "10";  -- b_addr = sp + 4
+                            wait_mem <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+                            mem_b_addr_src <= "00";
+                            mem_b_wrd_src <= "01";
+                            mem_b_mem_src <= '1';
+                            alu_a_src <= "10";
+                            alu_op <= "000";
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                            wait_mem <= '1';
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when POPSP =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+                            mem_a_addr_src <= '0';
+                            wait_mem <= '1';
+                        elsif falling_edge(busy) then
+                            wait_mem <= '0';
+                            sp_en <= '1';
+                            alu_a_src <= "10";
+                            alu_op <= "000";
+                            next_state <= fetch;
+                        end if;
+                    when ADDSP =>
+                        if wait_mem = '0' then
+                            mem_enable <= '1';
+
+                            alu_a_src <= "01";      -- Saida do registador SP 
+                            alu_b_src <= "11";      -- Saida de shfimm 
+                            alu_op <= "001";
+
+                            mem_b_addr_src <= "10";
+                            mem_a_addr_Src <= '0';
+
+                            wait_mem <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            alu_a_src <= "10";
+                            alu_b_src <= "01";
+                            alu_mem_src <= '1';
 
                             mem_b_wrd_src <= "00";
                             mem_b_addr_src <= "00";
-                            waiting_mem <= '1';
-                    end case;
-                end if;
-            end if;
-        end process;
-    end architecture behavior;
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            wait_mem <= '0';
+                            waited_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                        
+                    when CALL =>
+                        if wait_mem = '0' then
+                            wait_mem <= '1';
+
+                            sp_en <= '1';
+                            alu_a_src <= "01";
+                            alu_b_src <= "00";
+                            alu_shfimm_src <= '1';
+                            alu_op <= "000";
+
+                            mem_enable <= '1';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            wait_mem <= '0';
+                            waited_mem <= '1';
+
+                            mem_we <= '1';
+                            mem_enable <= '1';
+
+                            mem_b_wrd_src <= "00";
+                            alu_a_src <= "00";
+                            alu_op <= "000";
+
+                            mem_b_addr_src <= "00";
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            wait_mem <= '0';
+                            waited_mem <= '0';
+
+                            pc_en <= '1';
+                            pc_src <= '0';
+                            
+                            alu_b_src <= "10";
+                            alu_op <= "111";
+
+                            next_state <= fetch;
+                        end if;
+                    when STORESP =>
+                        if wait_mem = '0' then
+                            wait_mem <= '1';
+
+                            mem_a_addr_src <= '0';
+                            mem_enable <= '1';
+                            
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            mem_b_wrd_src <= "01";
+                            mem_b_mem_src <= '0';
+
+                            mem_b_addr_src <= "10";
+
+                            alu_a_src <= "01";
+                            alu_b_src <= "11";
+                            alu_op <= "001";
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            sp_en <= '1';
+
+                            alu_a_src <= "01";
+                            alu_b_src <= "00";
+                            alu_shfimm_src <= '1';
+                            alu_op <= "001";
+
+                            wait_mem <= '0';
+                            waited_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when LOADSP =>
+                        if wait_mem = '0' then
+                            wait_mem <= '1';
+
+                            alu_a_src <= "01";
+                            alu_b_src <= "11";
+                            alu_op <= "001";
+
+                            mem_b_addr_src <= "10";
+                            mem_enable <= '1';
+                            
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            sp_en <= '1';
+
+                            mem_b_wrd_src <= "01";
+                            mem_b_mem_src <= '1';
+
+                            mem_b_addr_src <= "10";
+
+                            alu_a_src <= "01";
+                            alu_b_src <= "00";
+                            alu_shfimm_src <= '1';
+                            alu_op <= "100";
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            wait_mem <= '0';
+                            waited_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when IM1 =>
+                        if wait_mem = '0' then
+                            sp_en <= '1';
+
+                            alu_a_src <= "01";
+                            alu_b_src <= "00";
+                            alu_shfimm_src <= '1';
+                            alu_op <= "100";
+
+                            mem_b_wrd_src <= "11";
+                            mem_b_addr_src <= "00";
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                        elsif falling_edge(busy) then
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when IMN =>
+                        if wait_mem = '0' then
+                            mem_b_addr_src <= "00";
+                            mem_a_addr_src <= '0';
+
+                            mem_enable <= '1';
+                            wait_mem <= '0';
+                        elsif waited_mem = '0' and falling_edge(busy) then
+                            waited_mem <= '1';
+
+                            mem_b_addr_src <= "00";
+                            mem_b_wrd_src <= "00";
+
+                            alu_b_src <= "01";
+                            alu_op <= "111";
+                            alu_mem_src <= '0';
+
+                            mem_enable <= '1';
+                            mem_we <= '1';
+                        elsif waited_mem = '1' and falling_edge(busy) then
+                            waited_mem <= '0';
+                            wait_mem <= '0';
+                            next_state <= fetch;
+                        end if;
+                    when others =>
+                        sp_en <= '0';
+                        pc_en <= '0';
+                        ir_en <= '0';
+                        mem_we <= '0';
+                        halted <= '1';
+                        halt <= '1';
+                        op_code_sel <= break;
+                end case;
+            when others =>
+                --Nada
+        end case;
+    end process combinatorio;
+end architecture behavior;
 
 --------------------------------------------------------------------------------
 

@@ -1,17 +1,17 @@
 v 4
-file . "polistack.vhdl" "f6e4aba36b3eb766b179f9053d03954294d19e4f" "20220424080339.617":
-  entity d_register at 1( 0) + 0 on 785;
-  architecture behavior of d_register at 16( 332) + 0 on 786;
-  entity alu at 30( 756) + 4 on 787;
-  entity bitoperation at 47( 1259) + 4 on 788;
-  architecture whenelse of bitoperation at 57( 1568) + 4 on 789;
-  architecture combinatory of alu at 75( 2320) + 4 on 790;
-  entity data_flow at 121( 3981) + 4 on 791;
-  architecture behavorial of data_flow at 147( 5023) + 4 on 792;
-  entity control_unit at 299( 10765) + 4 on 793;
-  architecture behavior of control_unit at 316( 11350) + 4 on 794;
-  entity polistack at 598( 22285) + 0 on 795;
-  architecture allinone of polistack at 618( 22875) + 0 on 796;
-file . "polistack_tb.vhdl" "4bf606cd964dd2da4a7cd7643bf407e73d25dc44" "20220424080340.403":
-  entity polistack_tb at 1( 0) + 0 on 797;
-  architecture test of polistack_tb at 8( 117) + 0 on 798;
+file . "polistack.vhdl" "612bd8826a029c44daa7de34afa1dc660675ffb6" "20220427174224.478":
+  entity d_register at 1( 0) + 0 on 1803;
+  architecture behavior of d_register at 16( 317) + 0 on 1804;
+  entity alu at 30( 727) + 4 on 1805;
+  entity bitoperation at 47( 1213) + 4 on 1806;
+  architecture whenelse of bitoperation at 57( 1512) + 4 on 1807;
+  architecture combinatory of alu at 75( 2246) + 4 on 1808;
+  entity data_flow at 121( 3861) + 4 on 1809;
+  architecture behavorial of data_flow at 147( 4877) + 4 on 1810;
+  entity control_unit at 299( 10467) + 0 on 1811;
+  architecture behavior of control_unit at 316( 10975) + 0 on 1812;
+  entity polistack at 932( 35408) + 0 on 1813;
+  architecture allinone of polistack at 952( 35978) + 0 on 1814;
+file . "polistack_tb.vhdl" "aa82e5a4587e5940f0303ae98d282edae00a08da" "20220427174225.797":
+  entity polistack_tb at 1( 0) + 0 on 1815;
+  architecture test of polistack_tb at 8( 117) + 0 on 1816;
