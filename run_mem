@@ -1,0 +1,5 @@
+ghdl -a dpram.vhdl
+ghdl -e dpram
+ghdl -a dpram_tb.vhdl
+ghdl -e dpram_tb
+ghdl -r dpram_tb --wave=dpram.ghw --max-stack-alloc=0
