@@ -1,0 +1,4 @@
+v 4
+file . "control_unit.vhdl" "dac44571d4b47fec859ef38efa7048fbfc57b346" "20220622003844.342":
+  entity control_unit at 1( 0) + 0 on 13;
+  architecture arch of control_unit at 22( 406) + 0 on 14;
